@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>اوراکل — موتور تصمیم گیری کیهانی</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Share+Tech+Mono&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;700&display=swap');
+
+  :root {
+    --void: #05050f;
+    --deep: #0a0a1e;
+    --panel: #0d0d22;
+    --border: #1a1a3e;
+    --dim: #222244;
+    --glow-y: #00ffc8;
+    --glow-n: #ff3c6e;
+    --glow-n: #ff4477;
+    --accent: #7c5cfc;
+    --gold: #c9a84c;
+    --text: #c8c8e8;
+    --muted: #555588;
+    --mono: 'Share Tech Mono', monospace;
+    --serif: 'Cinzel Decorative', serif;
+    --farsi: 'Vazirmatn', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--void);
+    color: var(--text);
+    font-family: var(--farsi);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+    cursor: crosshair;
+    direction: rtl;
+  }
+
+  /* Starfield */
+  #stars {
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+  }
+  .star {
+    position: absolute;
+    border-radius: 50%;
+    background: white;
+    animation: twinkle var(--d, 3s) ease-in-out infinite alternate;
+    opacity: var(--o, 0.5);
+  }
+  @keyframes twinkle { to { opacity: 0.05; transform: scale(0.5); } }
+
+  /* Nebula bg */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 30%, rgba(124,92,252,0.08) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 60% at 80% 70%, rgba(0,255,200,0.05) 0%, transparent 70%),
+      radial-gradient(ellipse 80% 80% at 50% 50%, rgba(10,10,30,1) 40%, transparent 100%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    width: min(640px, 96vw);
+    padding: 2rem 1rem 4rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2rem;
+  }
+
+  /* Header */
+  header {
+    text-align: center;
+    margin-top: 1rem;
+  }
+  .eyebrow {
+    font-size: 0.6rem;
+    letter-spacing: 0.35em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-size: clamp(1.8rem, 6vw, 2.8rem);
+    color: var(--gold);
+    text-shadow: 0 0 40px rgba(201,168,76,0.4);
+    letter-spacing: 0.05em;
+    line-height: 1.1;
+  }
+  .subtitle {
+    margin-top: 0.5rem;
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+  }
+
+  /* Signal feed */
+  #signal-feed {
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.75rem 1rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.35rem 1.5rem;
+  }
+  .signal-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    border-bottom: 1px solid var(--dim);
+    padding-bottom: 0.25rem;
+  }
+  .signal-row:last-child, .signal-row:nth-last-child(2):nth-child(odd) {
+    border-bottom: none;
+  }
+  .sig-label { color: var(--muted); font-family: var(--farsi); font-size: 0.65rem; }
+  .sig-val {
+    color: var(--accent);
+    font-weight: bold;
+    transition: color 0.4s;
+  }
+  .sig-val.live { color: var(--glow-y); }
+  .sig-val.fetching { color: var(--gold); animation: blink 1s step-end infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Entropy meter */
+  #entropy-bar-wrap {
+    width: 100%;
+  }
+  .bar-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    font-family: var(--farsi);
+    margin-bottom: 0.35rem;
+  }
+  #entropy-track {
+    width: 100%;
+    height: 4px;
+    background: var(--dim);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  #entropy-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--glow-y));
+    transition: width 0.3s ease;
+    border-radius: 2px;
+  }
+
+  /* Oracle circle */
+  #oracle-wrap {
+    position: relative;
+    width: 220px;
+    height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid;
+    animation: spin var(--spd, 20s) linear infinite;
+  }
+  .ring:nth-child(1) {
+    width: 100%; height: 100%;
+    border-color: rgba(124,92,252,0.3);
+    --spd: 25s;
+  }
+  .ring:nth-child(2) {
+    width: 82%; height: 82%;
+    border-color: rgba(201,168,76,0.2);
+    --spd: 18s;
+    animation-direction: reverse;
+  }
+  .ring:nth-child(3) {
+    width: 65%; height: 65%;
+    border-color: rgba(0,255,200,0.15);
+    --spd: 30s;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #oracle-circle {
+    width: 130px;
+    height: 130px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, var(--panel) 0%, var(--void) 100%);
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    position: relative;
+    z-index: 2;
+    transition: box-shadow 0.6s ease, border-color 0.6s ease;
+  }
+
+  #oracle-circle.yes {
+    border-color: var(--glow-y);
+    box-shadow: 0 0 60px rgba(0,255,200,0.35), 0 0 20px rgba(0,255,200,0.2) inset;
+  }
+  #oracle-circle.no {
+    border-color: var(--glow-n);
+    box-shadow: 0 0 60px rgba(255,68,119,0.35), 0 0 20px rgba(255,68,119,0.2) inset;
+  }
+
+  #result-glyph {
+    font-family: var(--farsi);
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+    transition: color 0.6s, text-shadow 0.6s;
+    color: var(--muted);
+  }
+  #oracle-circle.yes #result-glyph {
+    color: var(--glow-y);
+    text-shadow: 0 0 30px var(--glow-y);
+  }
+  #oracle-circle.no #result-glyph {
+    color: var(--glow-n);
+    text-shadow: 0 0 30px var(--glow-n);
+  }
+  #result-word {
+    font-size: 0.6rem;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin-top: 0.25rem;
+    font-family: var(--farsi);
+    transition: color 0.6s;
+  }
+  #oracle-circle.yes #result-word { color: var(--glow-y); }
+  #oracle-circle.no #result-word { color: var(--glow-n); }
+
+  /* Ask button */
+  #ask-btn {
+    font-family: var(--farsi);
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--gold);
+    background: transparent;
+    border: 1px solid var(--gold);
+    padding: 0.9rem 2.5rem;
+    cursor: crosshair;
+    border-radius: 2px;
+    position: relative;
+    overflow: hidden;
+    transition: color 0.3s, border-color 0.3s, box-shadow 0.3s;
+  }
+  #ask-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--gold);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.4s ease;
+    z-index: 0;
+  }
+  #ask-btn:hover::before { transform: scaleX(1); }
+  #ask-btn:hover { color: var(--void); border-color: var(--gold); box-shadow: 0 0 30px rgba(201,168,76,0.3); }
+  #ask-btn span { position: relative; z-index: 1; }
+  #ask-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #ask-btn:disabled::before { display: none; }
+
+  /* Reason block */
+  #reason-wrap {
+    width: 100%;
+    min-height: 3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  #reason-title {
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    font-family: var(--farsi);
+  }
+  #reason-text {
+    font-size: 0.8rem;
+    line-height: 1.9;
+    color: var(--text);
+    font-family: var(--farsi);
+    min-height: 2rem;
+    border-right: 2px solid var(--border);
+    border-left: none;
+    padding-right: 0.75rem;
+    padding-left: 0;
+  }
+  #hash-display {
+    font-size: 0.5rem;
+    color: var(--dim);
+    word-break: break-all;
+    letter-spacing: 0.05em;
+    margin-top: 0.2rem;
+  }
+
+  /* Log */
+  #log-wrap {
+    width: 100%;
+  }
+  #log-title {
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    font-family: var(--farsi);
+    margin-bottom: 0.4rem;
+  }
+  #log {
+    font-size: 0.55rem;
+    line-height: 1.8;
+    color: var(--muted);
+    height: 4rem;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    padding: 0.4rem 0.6rem;
+    background: var(--panel);
+    border-radius: 2px;
+    direction: ltr;
+    text-align: left;
+  }
+  #log::-webkit-scrollbar { width: 2px; }
+  #log::-webkit-scrollbar-thumb { background: var(--dim); }
+
+  /* Mic button */
+  #mic-btn {
+    font-family: var(--farsi);
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid var(--dim);
+    padding: 0.35rem 0.75rem;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.3s;
+  }
+  #mic-btn:hover { border-color: var(--muted); color: var(--text); }
+  #mic-btn.active { border-color: var(--glow-y); color: var(--glow-y); }
+
+  /* Compute animation */
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(124,92,252,0.6); }
+    70% { box-shadow: 0 0 0 20px rgba(124,92,252,0); }
+    100% { box-shadow: 0 0 0 0 rgba(124,92,252,0); }
+  }
+  #oracle-circle.computing { animation: pulse-ring 0.8s ease infinite; }
+
+  footer {
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+    color: var(--dim);
+    text-align: center;
+    margin-top: 1rem;
+    font-family: var(--farsi);
+    line-height: 1.8;
+  }
+
+  .controls-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+</style>
+</head>
+<body>
+
+<div id="stars"></div>
+
+<div class="container">
+
+  <header>
+    <p class="eyebrow">موتور آنتروپی کیهانی · نسخه  ۱.۰ توسط : abit </p>
+    <h2>اوراکل</h2>
+    <p class="subtitle">تصمیم دوگانه · متأثر از زمین، کیهان و لحظه‌ی حال شما</p>
+    <p style="font-family:var(--farsi);font-size:0.7rem;color:var(--muted);margin-top:0.6rem;line-height:1.7;max-width:400px;margin-inline:auto;">
+      اوراکل با ترکیب داده‌های زنده‌ی میدان مغناطیسی زمین، فاز ماه، آخرین زلزله، باد خورشیدی<br>و لحظه‌ی دقیق کلیک شما یک پاسخ بله یا خیر می‌سازد.
+    </p>
+  </header>
+
+  <!-- جدول سیگنال‌های زنده -->
+  <div id="signal-feed">
+    <div class="signal-row">
+      <span class="sig-label">شاخص Kp مغناطیسی</span>
+      <span class="sig-val fetching" id="sig-kp">…</span>
+    </div>
+    <div class="signal-row">
+      <span class="sig-label">سرعت طوفان خورشیدی</span>
+      <span class="sig-val fetching" id="sig-solar">…</span>
+    </div>
+    <div class="signal-row">
+      <span class="sig-label">فاز ماه</span>
+      <span class="sig-val" id="sig-moon">…</span>
+    </div>
+    <div class="signal-row">
+      <span class="sig-label">آخرین زلزله</span>
+      <span class="sig-val fetching" id="sig-quake">…</span>
+    </div>
+    <div class="signal-row">
+      <span class="sig-label">آنتروپی حرکت</span>
+      <span class="sig-val" id="sig-mouse">در حال جمع‌آوری</span>
+    </div>
+    <div class="signal-row">
+      <span class="sig-label">سطح صدای محیط</span>
+      <span class="sig-val" id="sig-audio">خاموش</span>
+    </div>
+    <div class="signal-row">
+      <span class="sig-label">یونیکس میلی‌ثانیه</span>
+      <span class="sig-val live" id="sig-time">…</span>
+    </div>
+    <div class="signal-row">
+      <span class="sig-label">جهت‌یابی دستگاه</span>
+      <span class="sig-val" id="sig-orient">ندارد</span>
+    </div>
+  </div>
+
+  <!-- نوار انباشت آنتروپی -->
+  <div id="entropy-bar-wrap">
+    <p class="bar-label">مخزن آنتروپی</p>
+    <div id="entropy-track"><div id="entropy-fill"></div></div>
+  </div>
+
+  <!-- نماد اوراکل -->
+  <div id="oracle-wrap">
+    <div class="ring"></div>
+    <div class="ring"></div>
+    <div class="ring"></div>
+    <div id="oracle-circle">
+      <div id="result-glyph">؟</div>
+      <div id="result-word">در انتظار</div>
+    </div>
+  </div>
+
+  <!-- دکمه‌ها -->
+  <div class="controls-row">
+    <button id="ask-btn"><span>✦ تصمیم بگیر ✦</span></button>
+    <button id="mic-btn">🎙 فعال‌سازی میکروفون</button>
+  </div>
+
+  <!-- توضیح انرژی -->
+  <div id="reason-wrap">
+    <p id="reason-title">امضای انرژی کیهانی</p>
+    <p id="reason-text">سیگنال‌ها را گرد آور. موس یا دستگاه را تکان بده. وقتی آماده شدی تصمیم بگیر.</p>
+    <p id="hash-display"></p>
+  </div>
+
+  <!-- گزارش -->
+  <div id="log-wrap">
+    <p id="log-title">گزارش اوراکل</p>
+    <div id="log"></div>
+  </div>
+
+  <footer>
+    تمام محاسبات در مرورگر شما انجام می‌شود · APIها: NOAA DONKI · USGS Earthquake<br>
+    در صورت قطع اینترنت، سیستم از داده‌های محلی (ماه، زمان، حرکت) استفاده می‌کند
+  </footer>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   ORACLE — Cosmic Binary Decision Engine
+   Entropy sources:
+     1. Geomagnetic Kp index (NOAA DONKI)
+     2. Solar wind speed (NOAA DONKI)
+     3. Recent earthquake magnitude (USGS)
+     4. Lunar phase (calculated client-side)
+     5. Planetary hour (ancient astrology, deterministic)
+     6. Unix timestamp (ms precision)
+     7. Mouse movement velocity (user moment)
+     8. Device orientation (mobile)
+     9. Microphone ambient noise RMS (optional)
+   ═══════════════════════════════════════════════════════════ */
+
+// ── Starfield ─────────────────────────────────────────────
+(function buildStars() {
+  const container = document.getElementById('stars');
+  for (let i = 0; i < 180; i++) {
+    const s = document.createElement('div');
+    s.className = 'star';
+    const sz = Math.random() * 2 + 0.5;
+    s.style.cssText = `
+      left:${Math.random()*100}%;top:${Math.random()*100}%;
+      width:${sz}px;height:${sz}px;
+      --d:${(Math.random()*4+2).toFixed(1)}s;
+      --o:${(Math.random()*0.7+0.1).toFixed(2)};
+      animation-delay:${(Math.random()*5).toFixed(2)}s
+    `;
+    container.appendChild(s);
+  }
+})();
+
+// ── Logging ────────────────────────────────────────────────
+const logEl = document.getElementById('log');
+function log(msg) {
+  const t = new Date().toISOString().substr(11, 12);
+  logEl.innerHTML += `<div>[${t}] ${msg}</div>`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ── State ──────────────────────────────────────────────────
+const state = {
+  kp: null,          // geomagnetic Kp 0-9
+  solarWind: null,   // km/s
+  quakeMag: null,    // Richter
+  moonPhase: 0,      // 0-1 (0=new, 0.5=full)
+  mouseEntropy: 0,   // accumulated mouse velocity hash
+  audioRMS: 0,       // mic noise level 0-1
+  orientation: {alpha:0,beta:0,gamma:0},
+  micActive: false,
+  audioCtx: null,
+  analyser: null,
+};
+
+// ── Entropy fill display ───────────────────────────────────
+let entropyScore = 0;
+function addEntropy(amount, label) {
+  entropyScore = Math.min(100, entropyScore + amount);
+  document.getElementById('entropy-fill').style.width = entropyScore + '%';
+  if (label) log(`+ entropy: ${label}`);
+}
+
+// ══════════════════════════════════════════════════════════
+// SOURCE 1: Geomagnetic Kp index — NOAA DONKI
+// ══════════════════════════════════════════════════════════
+async function fetchGeomagKp() {
+  try {
+    const now = new Date();
+    const from = new Date(now - 3*24*60*60*1000).toISOString().split('T')[0];
+    const to   = now.toISOString().split('T')[0];
+    const url  = `https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get/GST?startDate=${from}&endDate=${to}`;
+    const r = await fetch(url, {signal: AbortSignal.timeout(6000)});
+    const data = await r.json();
+    if (data && data.length > 0) {
+      // Pull the max KP from the most recent geomagnetic storm
+      const latest = data[data.length - 1];
+      const kpVal = latest.allKpIndex?.[latest.allKpIndex.length-1]?.kpIndex ?? 2;
+      state.kp = parseFloat(kpVal);
+    } else {
+      state.kp = 2; // quiet baseline
+    }
+  } catch(e) {
+    log('API میدان مغناطیسی در دسترس نیست — استفاده از تخمین زمانی');
+    // Fallback: derive pseudo-Kp from hour-of-day (solar activity cycle)
+    state.kp = (Math.sin(Date.now() / 3600000 * Math.PI / 6) * 2 + 3);
+  }
+  const el = document.getElementById('sig-kp');
+  el.textContent = state.kp.toFixed(1);
+  el.className = 'sig-val live';
+  addEntropy(15, `Kp=${state.kp.toFixed(1)}`);
+}
+
+// ══════════════════════════════════════════════════════════
+// SOURCE 2: Solar Wind speed — NOAA DONKI (CME list or fallback)
+// ══════════════════════════════════════════════════════════
+async function fetchSolarWind() {
+  try {
+    const now = new Date();
+    const from = new Date(now - 7*24*60*60*1000).toISOString().split('T')[0];
+    const to   = now.toISOString().split('T')[0];
+    const url  = `https://kauai.ccmc.gsfc.nasa.gov/DONKI/WS/get/WSAEnlilSimulations?startDate=${from}&endDate=${to}`;
+    const r = await fetch(url, {signal: AbortSignal.timeout(6000)});
+    const data = await r.json();
+    if (data && data.length > 0) {
+      const last = data[data.length - 1];
+      state.solarWind = parseFloat(last.estimatedShockArrivalTime ? 550 : 400);
+    } else throw new Error('no data');
+  } catch(e) {
+    // Fallback: use minute-of-day as proxy for solar activity variation
+    const mins = new Date().getHours()*60 + new Date().getMinutes();
+    state.solarWind = 350 + Math.abs(Math.sin(mins / 720 * Math.PI)) * 300;
+    log('باد خورشیدی: استفاده از تخمین مبتنی بر زمان');
+  }
+  const el = document.getElementById('sig-solar');
+  el.textContent = Math.round(state.solarWind) + ' km/s';
+  el.className = 'sig-val live';
+  addEntropy(12, `solar=${Math.round(state.solarWind)}`);
+}
+
+// ══════════════════════════════════════════════════════════
+// SOURCE 3: Recent earthquake — USGS
+// ══════════════════════════════════════════════════════════
+async function fetchQuake() {
+  try {
+    const url = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson';
+    const r = await fetch(url, {signal: AbortSignal.timeout(6000)});
+    const data = await r.json();
+    if (data.features && data.features.length > 0) {
+      state.quakeMag = data.features[0].properties.mag;
+    } else {
+      // Try all M2.5+ in last day
+      const r2 = await fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson',
+        {signal: AbortSignal.timeout(5000)});
+      const d2 = await r2.json();
+      state.quakeMag = d2.features?.[0]?.properties?.mag ?? 2.5;
+    }
+  } catch(e) {
+    log('USGS در دسترس نیست — استفاده از داده‌ی جایگزین لرزه‌ای');
+    // Derive from seconds-of-day (background seismic hum proxy)
+    state.quakeMag = 1.5 + (Date.now() % 86400000) / 86400000 * 4;
+  }
+  const el = document.getElementById('sig-quake');
+  el.textContent = 'M' + state.quakeMag.toFixed(1);
+  el.className = 'sig-val live';
+  addEntropy(13, `quake=M${state.quakeMag.toFixed(1)}`);
+}
+
+// ══════════════════════════════════════════════════════════
+// SOURCE 4: Lunar Phase — computed client-side
+// Using the synodic month from a known new moon epoch
+// ══════════════════════════════════════════════════════════
+function computeLunarPhase() {
+  // Known new moon: Jan 6 2000 18:14 UTC (J2000)
+  const knownNewMoon = new Date('2000-01-06T18:14:00Z').getTime();
+  const synodicMs    = 29.53058867 * 24 * 3600 * 1000;
+  const elapsed      = Date.now() - knownNewMoon;
+  state.moonPhase    = ((elapsed % synodicMs) / synodicMs + 1) % 1;
+
+  const phases = ['🌑 New','🌒 Waxing Crescent','🌓 First Quarter','🌔 Waxing Gibbous',
+                  '🌕 Full','🌖 Waning Gibbous','🌗 Last Quarter','🌘 Waning Crescent'];
+  const idx    = Math.round(state.moonPhase * 8) % 8;
+  document.getElementById('sig-moon').textContent = phases[idx];
+  document.getElementById('sig-moon').className = 'sig-val live';
+  addEntropy(10, `moon=${state.moonPhase.toFixed(3)}`);
+  log(`فاز ماه: ${(state.moonPhase*100).toFixed(1)}٪ — ${phases[idx].split(' ').slice(1).join(' ')}`);
+}
+
+// ══════════════════════════════════════════════════════════
+// SOURCE 5: Planetary hour (ancient astrology system)
+// Assigns a ruling planet to each hour of the day
+// ══════════════════════════════════════════════════════════
+function getPlanetaryInfluence() {
+  const planets = ['Sun','Venus','Mercury','Moon','Saturn','Jupiter','Mars'];
+  const dayOfWeek = new Date().getDay(); // 0=Sun
+  const hourOfDay = new Date().getHours();
+  // Starting planet for each day (ancient Chaldean order)
+  const dayStart  = [0,6,4,1,5,3,2]; // Sun=0,Sat=6,Mon=4...
+  const planetIdx = (dayStart[dayOfWeek] + hourOfDay) % 7;
+  return { planet: planets[planetIdx], idx: planetIdx };
+}
+
+// ══════════════════════════════════════════════════════════
+// SOURCE 6 & 7: Mouse movement — user's present moment
+// ══════════════════════════════════════════════════════════
+let lastMouseX = 0, lastMouseY = 0, lastMouseT = 0;
+let mouseVelSum = 0, mouseCount = 0;
+
+document.addEventListener('mousemove', (e) => {
+  const t = Date.now();
+  if (lastMouseT) {
+    const dt = t - lastMouseT;
+    if (dt > 0) {
+      const dx = e.clientX - lastMouseX;
+      const dy = e.clientY - lastMouseY;
+      const vel = Math.sqrt(dx*dx + dy*dy) / dt * 1000; // px/s
+      mouseVelSum += vel;
+      mouseCount++;
+      // XOR time bits with position for entropy accumulation
+      state.mouseEntropy = (state.mouseEntropy ^ (e.clientX * 0x9e3779b9)) >>> 0;
+      state.mouseEntropy = (state.mouseEntropy ^ (e.clientY * 0x85ebca6b)) >>> 0;
+      state.mouseEntropy = (state.mouseEntropy ^ (t & 0xffff)) >>> 0;
+
+      const avgVel = mouseVelSum / mouseCount;
+      document.getElementById('sig-mouse').textContent = Math.round(avgVel) + ' پیکسل/ثانیه';
+
+      if (entropyScore < 60) addEntropy(0.3, null);
+    }
+  }
+  lastMouseX = e.clientX; lastMouseY = e.clientY; lastMouseT = t;
+});
+
+// ══════════════════════════════════════════════════════════
+// SOURCE 8: Device orientation (mobile)
+// ══════════════════════════════════════════════════════════
+window.addEventListener('deviceorientation', (e) => {
+  state.orientation.alpha = e.alpha || 0;
+  state.orientation.beta  = e.beta  || 0;
+  state.orientation.gamma = e.gamma || 0;
+  const str = `α${Math.round(e.alpha||0)} β${Math.round(e.beta||0)}`;
+  document.getElementById('sig-orient').textContent = str;
+  document.getElementById('sig-orient').className = 'sig-val live';
+  addEntropy(0.5, null);
+});
+
+// ══════════════════════════════════════════════════════════
+// SOURCE 9: Microphone ambient noise (optional)
+// ══════════════════════════════════════════════════════════
+let micStream = null;
+document.getElementById('mic-btn').addEventListener('click', async () => {
+  if (state.micActive) {
+    if (micStream) micStream.getTracks().forEach(t => t.stop());
+    state.micActive = false;
+    state.audioRMS  = 0;
+    document.getElementById('mic-btn').textContent = '🎙 فعال‌سازی میکروفون';
+    document.getElementById('mic-btn').className = 'mic-btn';
+    document.getElementById('sig-audio').textContent = 'خاموش';
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({audio: true, video: false});
+    micStream = stream;
+    state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source   = state.audioCtx.createMediaStreamSource(stream);
+    state.analyser = state.audioCtx.createAnalyser();
+    state.analyser.fftSize = 256;
+    source.connect(state.analyser);
+    state.micActive = true;
+    document.getElementById('mic-btn').textContent = '🎙 میکروفون فعال';
+    document.getElementById('mic-btn').className = 'mic-btn active';
+    log('منبع آنتروپی میکروفون فعال شد');
+    addEntropy(10, 'mic enabled');
+
+    // Sample continuously
+    const buf = new Uint8Array(state.analyser.frequencyBinCount);
+    function sampleAudio() {
+      if (!state.micActive) return;
+      state.analyser.getByteTimeDomainData(buf);
+      let rms = 0;
+      for (let i = 0; i < buf.length; i++) {
+        const v = (buf[i] - 128) / 128;
+        rms += v * v;
+      }
+      state.audioRMS = Math.sqrt(rms / buf.length);
+      document.getElementById('sig-audio').textContent = (state.audioRMS * 100).toFixed(1) + '%';
+      document.getElementById('sig-audio').className = 'sig-val live';
+      addEntropy(0.1, null);
+      requestAnimationFrame(sampleAudio);
+    }
+    sampleAudio();
+  } catch(e) {
+    log('دسترسی به میکروفون رد شد');
+  }
+});
+
+// ── Live clock ─────────────────────────────────────────────
+setInterval(() => {
+  document.getElementById('sig-time').textContent = Date.now().toString(36).toUpperCase();
+}, 100);
+
+// ══════════════════════════════════════════════════════════
+// CORE ALGORITHM — combining all entropy sources
+// ══════════════════════════════════════════════════════════
+function computeOracle(clickMs) {
+  /* Each source contributes a float 0-1 or a raw integer.
+     We combine via:
+       1. Normalise each source to [0,1]
+       2. Weighted sum → float 0-1
+       3. XOR the mantissa bits of each with a Xorshift step
+       4. Compare final float to dynamic threshold (0.5 ± lunar bias) */
+
+  // ── Normalise sources ────────────────────────────────────
+  const kpNorm       = (state.kp  ?? 2)      / 9;          // 0-9  → 0-1
+  const solarNorm    = Math.min((state.solarWind ?? 400) / 800, 1); // 300-800 → 0-1
+  const quakeNorm    = Math.min((state.quakeMag ?? 2) / 9, 1);      // 0-9 → 0-1
+  const moonNorm     = state.moonPhase;                              // already 0-1
+  const moonFull     = 1 - Math.abs(moonNorm - 0.5) * 2;            // peaks at full
+  const audioNorm    = Math.min(state.audioRMS * 10, 1);
+  const mouseNorm    = ((state.mouseEntropy >>> 0) % 10000) / 10000;
+  const orientNorm   = ((state.orientation.alpha + state.orientation.beta + 180) % 360) / 360;
+
+  // ── Timestamp: use the exact ms of the button click ──────
+  const timeFrac     = (clickMs % 100000) / 100000;         // sub-100s cycle
+  const msLow        = (clickMs % 1000)   / 1000;           // sub-second
+
+  // ── Planetary: odd/even planet index → slight bias ───────
+  const planetary    = getPlanetaryInfluence();
+  const planNorm     = planetary.idx / 6;
+
+  // ── Weighted combination ─────────────────────────────────
+  //    Weights reflect "cosmic" vs local importance
+  const weights = {
+    kp:      0.12,   // geomagnetic
+    solar:   0.10,   // solar wind
+    quake:   0.10,   // seismic
+    moon:    0.12,   // lunar phase
+    audio:   0.10,   // ambient sound
+    mouse:   0.14,   // user's exact moment
+    orient:  0.06,   // device tilt
+    time:    0.14,   // sub-second click timing
+    planet:  0.08,   // planetary hour
+    msLow:   0.04,   // low ms component
+  };
+  const sum =
+    kpNorm    * weights.kp    +
+    solarNorm * weights.solar  +
+    quakeNorm * weights.quake  +
+    moonNorm  * weights.moon   +
+    audioNorm * weights.audio  +
+    mouseNorm * weights.mouse  +
+    orientNorm* weights.orient +
+    timeFrac  * weights.time   +
+    planNorm  * weights.planet +
+    msLow     * weights.msLow;
+
+  // ── Xorshift mixing (non-linear scramble) ────────────────
+  // Convert sum and raw integers to a 32-bit seed
+  let seed = Math.round(sum * 0xFFFFFFFF) >>> 0;
+  seed ^= (clickMs & 0xFFFFFF) >>> 0;
+  seed ^= (state.mouseEntropy & 0xFFFFFF) >>> 0;
+  seed ^= Math.round(moonNorm * 0xFFFF) ^ Math.round(kpNorm * 0xFFFF);
+
+  // Xorshift32
+  function xorshift(x) {
+    x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+    return (x >>> 0);
+  }
+  seed = xorshift(seed);
+  seed = xorshift(seed);
+  seed = xorshift(seed);
+
+  const finalFloat = (seed >>> 0) / 0xFFFFFFFF;  // 0-1
+
+  // ── Dynamic threshold: biased by lunar fullness ───────────
+  // Full moon → slight Yes bias; new moon → slight No bias
+  const threshold  = 0.5 - (moonFull - 0.5) * 0.06;  // 0.47–0.53
+  const result     = finalFloat > threshold ? 'YES' : 'NO';
+
+  // ── Build reason string ───────────────────────────────────
+  const reasons = [];
+  if (state.kp !== null) {
+    if (state.kp >= 5) reasons.push(`طوفان مغناطیسی (Kp ${state.kp.toFixed(1)})`);
+    else reasons.push(`مغناطیس‌کره آرام (Kp ${state.kp.toFixed(1)})`);
+  }
+  if (moonFull > 0.85) reasons.push('نزدیک به ماه کامل ✦');
+  else if (moonNorm < 0.1 || moonNorm > 0.9) reasons.push('خلأ ماه نو');
+  if (state.quakeMag !== null && state.quakeMag >= 5) reasons.push(`زلزله‌ی اخیر M${state.quakeMag.toFixed(1)}`);
+  if (state.audioRMS > 0.05) reasons.push(`صدای محیط ≈ ${(state.audioRMS*100).toFixed(0)}٪`);
+  reasons.push(`ساعت سیاره‌ای ${planetary.planet}`);
+  if ((clickMs % 1000) < 50) reasons.push('میلی‌ثانیه‌ی برنده');
+
+  const bias = finalFloat > threshold ? 'تمایل به بله' : 'تمایل به خیر';
+  const reasonStr = reasons.join(' · ') + ` ← ${bias}`;
+
+  return { result, finalFloat, threshold, seed, reasonStr,
+           detail: { kpNorm, solarNorm, quakeNorm, moonNorm, audioNorm,
+                     mouseNorm, timeFrac, planNorm, sum, finalFloat } };
+}
+
+// ══════════════════════════════════════════════════════════
+// ASK BUTTON
+// ══════════════════════════════════════════════════════════
+document.getElementById('ask-btn').addEventListener('click', async () => {
+  const clickMs = Date.now(); // capture exact millisecond of intention
+  const btn     = document.getElementById('ask-btn');
+  const circle  = document.getElementById('oracle-circle');
+  const glyph   = document.getElementById('result-glyph');
+  const word    = document.getElementById('result-word');
+
+  btn.disabled = true;
+  circle.className = 'computing';
+  glyph.textContent = '◌';
+  word.textContent  = 'در حال مشورت…';
+  document.getElementById('reason-text').textContent = 'در حال گردآوری سیگنال‌های کیهانی…';
+  document.getElementById('hash-display').textContent = '';
+
+  log(`اوراکل فراخوانی شد در unix:${clickMs} (${new Date(clickMs).toISOString()})`);
+
+  // Brief animation pause while we compute
+  await new Promise(r => setTimeout(r, 1200));
+
+  const {result, finalFloat, threshold, seed, reasonStr, detail} = computeOracle(clickMs);
+
+  // ── Display result ────────────────────────────────────────
+  circle.className  = result === 'YES' ? 'yes' : 'no';
+  glyph.textContent = result === 'YES' ? 'بله' : 'خیر';
+  word.textContent  = result === 'YES' ? 'پاسخ مثبت' : 'پاسخ منفی';
+
+  document.getElementById('reason-text').textContent = reasonStr;
+  document.getElementById('hash-display').textContent =
+    `seed:0x${seed.toString(16).toUpperCase().padStart(8,'0')} · float:${finalFloat.toFixed(6)} · θ:${threshold.toFixed(4)}`;
+
+  log(`نتیجه: ${result === 'YES' ? 'بله' : 'خیر'} · float=${finalFloat.toFixed(6)} > θ=${threshold.toFixed(4)} ? ${finalFloat > threshold}`);
+  log(`تأثیرها: Kp=${detail.kpNorm.toFixed(3)}, ☾=${detail.moonNorm.toFixed(3)}, زلزله=${detail.quakeNorm.toFixed(3)}, حرکت=${detail.mouseNorm.toFixed(3)}, Σ=${detail.sum.toFixed(4)}`);
+
+  setTimeout(() => { btn.disabled = false; }, 2000);
+});
+
+// ══════════════════════════════════════════════════════════
+// INITIALISE — fetch all live data on load
+// ══════════════════════════════════════════════════════════
+log('اوراکل در حال راه‌اندازی…');
+computeLunarPhase();
+
+(async () => {
+  await Promise.allSettled([fetchGeomagKp(), fetchSolarWind(), fetchQuake()]);
+  log('تمام سیگنال‌های خارجی دریافت شدند. اوراکل آماده است.');
+  addEntropy(5, 'init complete');
+})();
+</script>
+</body>
+</html>
